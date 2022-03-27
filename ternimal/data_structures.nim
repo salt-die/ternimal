@@ -1,11 +1,11 @@
 type
   Point* = tuple
-    x: int
     y: int
+    x: int
 
   Size* = tuple
-    width: int
     height: int
+    width: int
 
 proc cols*(size: Size): int =
   ## Alias for width
