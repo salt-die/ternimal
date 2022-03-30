@@ -67,6 +67,7 @@ proc create_mouse_event(data: string): MouseEvent =
     y -= 32
   else:
     if data[2] == '<':  # \x1b[<64;85;12M
+      # May only accept TERM_SGR inputs in the future...
       (info, x, y) = data[3..^1].split(";", 3).map(parse_int)
       mouse_info = TERM_SGR.get_or_default((info, data[^1]), default_info)
     else:  # \x1b[96;14;13M
@@ -104,7 +105,7 @@ proc find_longest_match =
 
     kp = ANSI_ESCAPES[prefix]
 
-    if kp.key == events.Key.escape and kp.mods == no_mods:
+    if kp == events.escape:
       if suffix.len == 1:
         # alt + character
         kp = (suffix, events.Key.char, (true, false, false))
