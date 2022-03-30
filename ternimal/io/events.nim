@@ -38,11 +38,11 @@ type
     f22
     f23
     f24
-    paste
     ignore
     tab
     enter
     backspace
+    unknown
 
   MouseEventType* {.pure.} = enum
     mouse_up
@@ -77,6 +77,18 @@ type
   PasteEvent* {.pure.} = tuple
     paste: string
 
+  EventType* = enum
+    key_press, mouse, paste
+
+  Event* {.union.} = object
+    key_press_event*: KeyPressEvent
+    mouse_event*: MouseEvent
+    paste_event*: PasteEvent
+
+  EventPackage* = tuple
+    `type`: EventType
+    event: Event
+
 proc meta*(mods: Mods): bool =
   ## Alias for `alt`
   mods.alt
@@ -86,6 +98,6 @@ proc control*(mods: Mods): bool =
   mods.ctrl
 
 const
-  NO_MODS*: Mods = (false, false, false)
-  ENTER*: KeyPressEvent = ("", Key.enter, NO_MODS)
-  ESCAPE*: KeyPressEvent = ("", Key.escape, NO_MODS)
+  no_mods*: Mods = (false, false, false)
+  enter*: KeyPressEvent = ("", Key.enter, no_mods)
+  escape*: KeyPressEvent = ("", Key.escape, no_mods)
