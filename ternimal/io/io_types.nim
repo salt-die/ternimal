@@ -1,4 +1,4 @@
-from ../data_structures import Point
+from ../ternimal_types import Point
 
 type
   Key* {.pure.} = enum
@@ -43,6 +43,7 @@ type
     enter
     backspace
     unknown
+    none
 
   MouseEventType* {.pure.} = enum
     mouse_up
@@ -68,6 +69,8 @@ type
     key: Key
     mods: Mods
 
+  MouseInfo* {.pure.} = (MouseEventType, MouseButton, Mods)
+
   MouseEvent* {.pure.} = tuple
     position: Point
     event_type: MouseEventType
@@ -77,17 +80,14 @@ type
   PasteEvent* {.pure.} = tuple
     paste: string
 
-  EventType* = enum
+  EventKind* = enum
     key_press, mouse, paste
 
-  Event* {.union.} = object
-    key_press_event*: KeyPressEvent
-    mouse_event*: MouseEvent
-    paste_event*: PasteEvent
-
-  EventPackage* = tuple
-    `type`: EventType
-    event: Event
+  Event* = object
+    case kind*: EventKind
+    of key_press: key_press_event*: KeyPressEvent
+    of mouse: mouse_event*: MouseEvent
+    of paste: paste_event*: PasteEvent
 
 proc meta*(mods: Mods): bool =
   ## Alias for `alt`
