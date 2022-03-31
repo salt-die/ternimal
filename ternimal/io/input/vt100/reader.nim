@@ -1,4 +1,4 @@
-import std/[posix, re, sequtils, strutils, tables]
+import std/[posix, re, sequtils, strutils, tables, unicode]
 
 import ../../io_types
 import ansi_escapes
@@ -132,7 +132,7 @@ proc parse_ansi(key: string) =
     if in_paste:
       if data.ends_with(end_paste):
         data.remove_suffix(end_paste)
-        events_queue.add(Event(kind: paste, paste_event: (paste: data)))
+        events_queue.add(Event(kind: paste, paste_event: (paste: data.to_runes)))
         in_paste = false
         data = ""
     elif data.len > 0 and not has_longer_match(data):

@@ -1,3 +1,4 @@
+import std/unicode
 from ../ternimal_types import Point
 
 type
@@ -78,9 +79,9 @@ type
     mods: Mods
 
   PasteEvent* {.pure.} = tuple
-    paste: string
+    paste: seq[Rune]
 
-  EventKind* = enum
+  EventKind* {.pure.} = enum
     key_press, mouse, paste
 
   Event* = object
