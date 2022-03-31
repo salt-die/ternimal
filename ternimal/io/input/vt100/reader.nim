@@ -21,7 +21,7 @@ var
 tv.tv_sec = Time(0)
 tv.tv_usec = 0
 
-proc read_stdin(): string =
+proc read_stdin: string =
   ## Non-blocking read of stdin
   var fds: TFdSet
   FD_ZERO(fds)
