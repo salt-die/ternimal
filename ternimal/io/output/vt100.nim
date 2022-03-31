@@ -1,5 +1,5 @@
 import std/[posix, strformat, termios]
-from ../../data_structures import Size
+from ../../ternimal_types import Size
 
 var
   term: string
