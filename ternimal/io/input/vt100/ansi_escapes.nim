@@ -1,5 +1,5 @@
 from std/tables import toTable, Table
-from ../../events import Key, Mods, KeyPressEvent, no_mods
+from ../../io_types import Key, Mods, KeyPressEvent, no_mods
 
 const
   alt: Mods = (true, false, false)

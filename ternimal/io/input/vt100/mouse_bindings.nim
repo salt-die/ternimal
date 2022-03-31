@@ -1,8 +1,5 @@
 from std/tables import toTable, Table
-from ../../events import MouseEventType, MouseButton, Mods, no_mods
-
-type
-  MouseInfo* = (MouseEventType, MouseButton, Mods)
+from ../../io_types import MouseEventType, MouseButton, Mods, MouseInfo, no_mods
 
 const
   alt: Mods = (true, false, false)

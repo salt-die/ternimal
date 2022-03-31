@@ -1,6 +1,6 @@
 import std/[posix, re, sequtils, strutils, tables]
 
-import ../../events
+import ../../io_types
 import ansi_escapes
 import mouse_bindings
 
@@ -11,7 +11,7 @@ const
 
 var
   data = ""
-  events_queue = new_seq[EventPackage](0)
+  events_queue = new_seq[Event](0)
   in_paste = false
   mouse_re = re"^\e[(<?[\d;]+[mM]|M...)\Z"
   mouse_prefix_re = re"^\e[(<?[\dl;]*|M.{0,2})\Z"
@@ -90,8 +90,7 @@ proc find_longest_match =
     suffix = data[i + 1..^1]
 
     if prefix.match(mouse_re):
-      let m = Event(mouse_event: create_mouse_event(prefix))
-      events_queue.add((mouse, m))
+      events_queue.add(Event(kind: mouse, mouse_event: create_mouse_event(prefix)))
       data = suffix
       return
 
@@ -105,22 +104,22 @@ proc find_longest_match =
 
     kp = ANSI_ESCAPES[prefix]
 
-    if kp == events.escape:
+    if kp == io_types.escape:
       if suffix.len == 1:
         # alt + character
-        kp = (suffix, events.Key.char, (true, false, false))
-        events_queue.add((key_press, Event(key_press_event: kp)))
+        kp = (suffix, io_types.Key.char, (true, false, false))
+        events_queue.add(Event(kind: key_press, key_press_event: kp))
         data = ""
         return
 
       if suffix.len > 1:
         # unknown escape sequence
-        kp = ("", events.Key.unknown, no_mods)
-        events_queue.add((key_press, Event(key_press_event: kp)))
+        kp = ("", io_types.Key.unknown, no_mods)
+        events_queue.add(Event(kind: key_press, key_press_event: kp))
         data = ""
         return
 
-    events_queue.add((key_press, Event(key_press_event: kp)))
+    events_queue.add(Event(kind: key_press, key_press_event: kp))
     data = suffix
 
 proc parse_ansi(key: string) =
@@ -133,16 +132,13 @@ proc parse_ansi(key: string) =
     if in_paste:
       if data.ends_with(end_paste):
         data.remove_suffix(end_paste)
-
-        let p: PasteEvent = (paste: data)
-        events_queue.add((paste, Event(paste_event: p)))
-
+        events_queue.add(Event(kind: paste, paste_event: (paste: data)))
         in_paste = false
         data = ""
     elif data.len > 0 and not has_longer_match(data):
       find_longest_match()
 
-proc read_keys*: seq[EventPackage] =
+proc read_keys*: seq[Event] =
   events_queue.set_len(0)
 
   var keys: string
