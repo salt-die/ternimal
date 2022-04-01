@@ -1,4 +1,4 @@
-import std/[math, strutils]
+import std/strutils
 
 type
   Color* = tuple
@@ -17,19 +17,20 @@ type
     fg: Color
 
 proc from_hex*(cls: type[Color], hexcode: string): Color =
-  let color = hexcode.fromHex[:uint32]
+  var hex = hexcode.normalize()
+  hex.remove_prefix('#')
   result = (
-    uint8(color shr 16),
-    uint8(color shr 8 mod 256),
-    uint8(color mod 256),
+    hex[0..1].from_hex[:uint8],
+    hex[2..3].from_hex[:uint8],
+    hex[4..5].from_hex[:uint8],
   )
 
 proc from_hex*(cls: type[AColor], hexcode: string): AColor =
-  let color = hexcode.fromHex[:uint32]
-  # TODO: Default to 255 for alpha value if hexcode is too short.
+  var hex = hexcode.normalize()
+  hex.remove_prefix('#')
   result = (
-    uint8(color shr 24),
-    uint8(color shr 16 mod 256),
-    uint8(color shr 8 mod 256),
-    uint8(color mod 256),
+    hex[0..1].from_hex[:uint8],
+    hex[2..3].from_hex[:uint8],
+    hex[4..5].from_hex[:uint8],
+    if hex.len == 8: hex[6..7].from_hex[:uint8] else: 255.uint8,
   )
