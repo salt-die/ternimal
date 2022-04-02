@@ -74,7 +74,7 @@ macro class*(head, body: untyped): untyped =
   )
   all_classes[name] = classinfo
 
-  result = newNimNode(nnkVarSection).add(newIdentDefs(name.ident, newEmptyNode(), newLit(classinfo)))
+  newNimNode(nnkVarSection).add(newIdentDefs(name.ident, newEmptyNode(), newLit(classinfo)))
 
 macro class*(head: untyped): untyped =
   ## Empty class definition
