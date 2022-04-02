@@ -1,6 +1,9 @@
 ## For inheritable widget behaviors, full OO will need to be implemented.
-## Attributes and methods are not yet implemented.
-## Attributes will likely be descriptors for dispatches.
+## Notes
+## -----
+## * Attributes and methods are not yet implemented.
+## * Attributes will likely be descriptors for dispatches.
+## * `all_classes` can be removed if we figure out how to bind idents at compile time.
 import std/[macros, sequtils, strformat, sugar, tables]
 
 type
@@ -88,11 +91,21 @@ when is_main_module:
   class K3(A, D)
   class Z(K1, K3, K2)
 
+  echo A.mro
+  echo B.mro
+  echo C.mro
+  echo D.mro
+  echo E.mro
   echo K1.mro
   echo K2.mro
   echo K3.mro
   echo Z.mro
 
+  # @["A", "BaseClass"]
+  # @["B", "BaseClass"]
+  # @["C", "BaseClass"]
+  # @["D", "BaseClass"]
+  # @["E", "BaseClass"]
   # @["K1", "C", "B", "A", "BaseClass"]
   # @["K2", "B", "D", "E", "BaseClass"]
   # @["K3", "A", "D", "BaseClass"]
