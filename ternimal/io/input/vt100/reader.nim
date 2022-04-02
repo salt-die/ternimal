@@ -68,10 +68,10 @@ proc create_mouse_event(data: string): MouseEvent =
   else:
     if data[2] == '<':  # \x1b[<64;85;12M
       # May only accept TERM_SGR inputs in the future...
-      (info, x, y) = data[3..^1].split(";", 3).map(parse_int)
+      (info, x, y) = data[3..^2].split(";", 3).map(parse_int)
       mouse_info = TERM_SGR.get_or_default((info, data[^1]), default_info)
     else:  # \x1b[96;14;13M
-      (info, x, y) = data[2..^1].split(";", 3).map(parse_int)
+      (info, x, y) = data[2..^2].split(";", 3).map(parse_int)
       mouse_info = URXVT.get_or_default(info, default_info)
 
     x -= 1
