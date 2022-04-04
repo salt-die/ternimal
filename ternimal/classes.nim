@@ -1,29 +1,28 @@
-## For inheritable widget behaviors, full OO will need to be implemented.
-## Notes
-## -----
-## * Attributes and methods are not yet implemented.
-## * Attributes will likely be descriptors for dispatches.
-## * `all_classes` can be removed if we figure out how to bind idents at compile time.
-import std/[macros, sequtils, strformat, sugar, tables]
+import std/[macros, sequtils, sugar, tables]
 
 type
-  ClassInfo = ref object
-    name: string
-    bases, mro: seq[string]
-    attrs, methods: seq[NimNode]  # attrs and methods will probably be replaced by chainmaps
+  ClassInternal = tuple
+    id: NimNode
+    mro, attrs, methods: seq[NimNode]
 
-# TODO: default `init`/`$`
 let
-  BaseClass {.compileTime.} = ClassInfo(name: "BaseClass", mro: @["BaseClass"])
+  BaseInternal {.compile_time.}: ClassInternal = (
+    id: ident"BaseClass",
+    mro: @[ident"BaseClass"],
+    attrs: @[],
+    methods: @[],
+  )
 
 var
-  all_classes {.compileTime.}: Table[string, ClassInfo] = {BaseClass.name: BaseClass}.to_table
+  class_lookup {.compile_time.}: Table[string, ClassInternal] = {
+    $BaseInternal.id: BaseInternal,
+  }.to_table
 
-proc linearize(bases: seq[seq[string]]): seq[string] =
+proc linearize(bases: seq[seq[NimNode]]): seq[NimNode] =
   if bases.len == 0:
     return
 
-  var candidate: string
+  var candidate: NimNode
 
   for base in bases:
     candidate = base[0]
@@ -38,47 +37,47 @@ proc linearize(bases: seq[seq[string]]): seq[string] =
 
   error "can't resolve bases"
 
-proc method_resolution(name: string, bases: seq[string]): seq[string] =
+proc method_resolution(name: NimNode, bases: seq[NimNode]): seq[NimNode] =
   ## Deterministic method resolution order using C3 linearization
-  @[name] & bases.mapit(all_classes[it].mro).linearize
+  @[name] & bases.mapit(class_lookup[$it].mro).linearize
 
-macro class*(head, body: untyped): untyped =
+macro class*(head: untyped, body: untyped = nnkEmpty.newNimNode): untyped =
   var
-    name: string
-    bases: seq[string]
-    attrs: seq[NimNode]
-    methods: seq[NimNode]
+    id: NimNode
+    bases: seq[NimNode]
 
   case head.kind:
-  of nnkIdent:
-    name = $head
-    if name != BaseClass.name:
-      bases.add BaseClass.name
-  of nnkCall:
-    name = $head[0]
-    for base in head[1..^1].mapit $it:
-      if base notin all_classes:
-        error fmt"{base} not defined"
-      bases.add base
+  of nnkIdent:  # class MyClass
+    id = head
+    bases.add BaseInternal.id
+  of nnkCall:  # class MyClass(ParentA, ParentB)
+    id = head[0]
+    bases.add head[1..^1]
   else: error "bad class syntax"
 
-  if name in all_classes:
-    error "class redefinition not allowed"
+  let
+    mro = id.method_resolution bases
+    mro_repr = mro.mapit($it)
+    name = $id
+    # parse and resolve attributes through mro
+    # parse and resolve methods through mro
 
-  var classinfo = ClassInfo(
-    name: name,
-    bases: bases,
-    mro: method_resolution(name, bases),
-    attrs: attrs,
-    methods: methods
+  class_lookup[name] = (
+    id: id,
+    mro: mro,
+    attrs: @[],
+    methods: @[],
   )
-  all_classes[name] = classinfo
 
-  newNimNode(nnkVarSection).add(newIdentDefs(name.ident, newEmptyNode(), newLit(classinfo)))
+  # add procs for each attr and method
+  quote do:
+    type `id`* = ref object
 
-macro class*(head: untyped): untyped =
-  ## Empty class definition
-  quote do: class `head`: discard
+    proc clsname*(cls: type(`id`) or `id`): string =
+      `name`
+
+    proc mro*(cls: type(`id`) or `id`): seq[string] =
+      @`mro_repr`
 
 when is_main_module:
   class A
@@ -89,24 +88,18 @@ when is_main_module:
   class K1(C, B, A)
   class K2(B, D, E)
   class K3(A, D)
-  class Z(K1, K3, K2)
 
-  echo A.mro
-  echo B.mro
-  echo C.mro
-  echo D.mro
-  echo E.mro
+  # Full class specialization:
+  class Z(K1, K3, K2):
+    var
+      a: int
+      b: string
+
+    method do_something =
+      super().do_something
+      echo "something done"
+
   echo K1.mro
   echo K2.mro
   echo K3.mro
   echo Z.mro
-
-  # @["A", "BaseClass"]
-  # @["B", "BaseClass"]
-  # @["C", "BaseClass"]
-  # @["D", "BaseClass"]
-  # @["E", "BaseClass"]
-  # @["K1", "C", "B", "A", "BaseClass"]
-  # @["K2", "B", "D", "E", "BaseClass"]
-  # @["K3", "A", "D", "BaseClass"]
-  # @["Z", "K1", "C", "K3", "K2", "B", "A", "D", "E", "BaseClass"]
