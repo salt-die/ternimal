@@ -3,14 +3,15 @@ import std/[macros, sequtils, sugar, tables]
 type
   ClassInternal = tuple
     id: NimNode
-    mro, attrs, methods: seq[NimNode]
+    mro: seq[NimNode]
+    attrs, methods: NimNode
 
 let
   BaseInternal {.compile_time.}: ClassInternal = (
     id: ident"BaseClass",
     mro: @[ident"BaseClass"],
-    attrs: @[],
-    methods: @[],
+    attrs: newStmtList(),
+    methods: newStmtList(),
   )
 
 var
@@ -39,7 +40,48 @@ proc linearize(bases: seq[seq[NimNode]]): seq[NimNode] =
 
 proc method_resolution(name: NimNode, bases: seq[NimNode]): seq[NimNode] =
   ## Deterministic method resolution order using C3 linearization
+  ## See: https://en.wikipedia.org/wiki/C3_linearization
   @[name] & bases.mapit(class_lookup[$it].mro).linearize
+
+proc set_node_type(node: NimNode) =
+  ## Replace empty annotations for vars and consts.
+  node.expectKind {nnkIdentDefs, nnkConstDef}
+  if node[^2].kind == nnkEmpty:
+    node[^2] = newCall(ident"typeof", node[^1])
+
+proc class_const(class_id, constant: NimNode): NimNode =
+  ## Constant lookups for classes.
+  let
+    id = constant[0]
+    kind = constant[1]
+    val = constant[2]
+
+  quote do:
+    proc `id`*(cls: type(`class_id`) or `class_id`): `kind` = `val`
+
+proc parse_class_body(class_id: NimNode, mro: seq[NimNode], body: NimNode): tuple[attrs: NimNode, methods: NimNode]=
+  # Will likely change attrs and methods into tables for easier dispatch using chainmaps.
+  # All attrs will be replaced with property-like objects that allow binding (so updating a widget property can be observed by other widgets)
+  result.attrs = newStmtList()
+  result.methods = newStmtList()
+
+  for node in body:
+    case node.kind
+    of nnkVarSection:
+      for variable in node:
+        variable.set_node_type
+        result.attrs.add variable
+    of nnkConstSection:
+      for constant in node:
+        constant.set_node_type
+        result.methods.add class_id.class_const constant
+    of nnkProcDef, nnkMethodDef, nnkFuncDef, nnkIteratorDef, nnkConverterDef, nnkTemplateDef:
+      # Insert self
+      # Replace super
+      #result.methods.add node
+      discard
+    else:
+      discard
 
 macro class*(head: untyped, body: untyped = nnkEmpty.newNimNode): untyped =
   var
@@ -57,27 +99,31 @@ macro class*(head: untyped, body: untyped = nnkEmpty.newNimNode): untyped =
 
   let
     mro = id.method_resolution bases
+    (attrs, methods) = id.parse_class_body(mro, body)
     mro_repr = mro.mapit($it)
     name = $id
-    # parse and resolve attributes through mro
-    # parse and resolve methods through mro
 
   class_lookup[name] = (
     id: id,
     mro: mro,
-    attrs: @[],
-    methods: @[],
+    attrs: attrs,
+    methods: methods,
   )
 
-  # add procs for each attr and method
-  quote do:
+  let self = quote do:
+    type(`id`) or `id`
+
+  result = quote do:
     type `id`* = ref object
 
-    proc clsname*(cls: type(`id`) or `id`): string =
+    proc clsname*(cls: `self`): string =
       `name`
 
-    proc mro*(cls: type(`id`) or `id`): seq[string] =
+    proc mro*(cls: `self`): seq[string] =
       @`mro_repr`
+
+  for m in methods:
+    result.add m
 
 when is_main_module:
   class A
@@ -91,6 +137,9 @@ when is_main_module:
 
   # Full class specialization:
   class Z(K1, K3, K2):
+    const
+      version = (1, 2)
+
     var
       a: int
       b: string
@@ -103,3 +152,4 @@ when is_main_module:
   echo K2.mro
   echo K3.mro
   echo Z.mro
+  echo Z.version
