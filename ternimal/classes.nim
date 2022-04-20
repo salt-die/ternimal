@@ -151,12 +151,15 @@ when is_main_module:
   class A
   class B
   class C:
-    proc meow =
+    proc noise =
       echo "meow"
 
   class D
   class E
-  class K1(C, B, A)
+  class K1(C, B, A):
+    proc noise =
+      echo "woof"
+      super()
   class K2(B, D, E)
   class K3(A, D)
 
@@ -172,7 +175,8 @@ when is_main_module:
     proc set_a(a: int) =
       self.a = a
 
-    proc meow =
+    proc noise =
+      echo "moo"
       super()
 
   echo K1.mro
@@ -183,4 +187,4 @@ when is_main_module:
   var z = Z(a: 1, b: "hi")
   z.set_a(10)
   echo z.a
-  z.meow()
+  z.noise()
