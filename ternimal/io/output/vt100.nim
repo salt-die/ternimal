@@ -2,7 +2,7 @@ import std/[posix, strformat, termios]
 from ../../ternimal_types import Size
 
 var
-  term: string
+  term: string  # TODO: set this at load time
   buffer: string
 
 proc get_size*: Size =
