@@ -1,17 +1,19 @@
 import std/[macros, sequtils, sugar, tables]
 
 type
+  VTable = Table[string, NimNode]
+
   ClassInternal = tuple
     id: NimNode
     mro: seq[NimNode]
-    attrs, methods: NimNode
+    attrs, methods: VTable
 
 let
   BaseInternal {.compile_time.}: ClassInternal = (
     id: ident"BaseClass",
     mro: @[ident"BaseClass"],
-    attrs: newStmtList(),
-    methods: newStmtList(),
+    attrs: VTable(),
+    methods: VTable(),
   )
 
 var
@@ -38,7 +40,7 @@ proc linearize(bases: seq[seq[NimNode]]): seq[NimNode] =
 
   error "can't resolve bases"
 
-proc method_resolution(name: NimNode, bases: seq[NimNode]): seq[NimNode] =
+proc method_resolution(bases: seq[NimNode], name: NimNode): seq[NimNode] =
   ## Deterministic method resolution order using C3 linearization
   ## See: https://en.wikipedia.org/wiki/C3_linearization
   @[name] & bases.mapit(class_lookup[$it].mro).linearize
@@ -59,27 +61,37 @@ proc class_const(class_id, constant: NimNode): NimNode =
   quote do:
     proc `id`*(cls: type(`class_id`) or `class_id`): `kind` = `val`
 
-proc parse_class_body(class_id: NimNode, mro: seq[NimNode], body: NimNode): tuple[attrs: NimNode, methods: NimNode]=
-  # Will likely change attrs and methods into tables for easier dispatch using chainmaps.
-  # All attrs will be replaced with property-like objects that allow binding (so updating a widget property can be observed by other widgets)
-  result.attrs = newStmtList()
-  result.methods = newStmtList()
+proc parse_class_body(body, class_id: NimNode, mro: seq[NimNode]): tuple[attrs: VTable, methods: VTable]=
+  result.attrs = VTable()
+  result.methods = VTable()
 
   for node in body:
     case node.kind
     of nnkVarSection:
       for variable in node:
         variable.set_node_type
-        result.attrs.add variable
+        result.attrs[$variable[0]] = variable
     of nnkConstSection:
       for constant in node:
         constant.set_node_type
-        result.methods.add class_id.class_const constant
-    of nnkProcDef, nnkMethodDef, nnkFuncDef, nnkIteratorDef, nnkConverterDef, nnkTemplateDef:
-      # Insert self
-      # Replace super
-      #result.methods.add node
-      discard
+        result.methods[$constant[0]] = class_const(class_id, constant)
+    of nnkProcDef, nnkFuncDef, nnkIteratorDef, nnkConverterDef:  # nnkMethodDef, nnkTemplateDef not handled.
+      # Add `self` to arguments of callable
+      node[3].insert 1, nnkIdentDefs.newTree(ident"self", class_id, newEmptyNode())
+
+      # Replace `super()` with parent's method.
+      for i, statement in node[6]:
+        if statement.kind == nnkCall and statement[0] == ident"super":
+          block find_super:
+            for parent in mro[1..^1]:
+              if $node[0] in class_lookup[$parent].methods:
+                node[6][i] = class_lookup[$parent].methods[$node[0]][6]
+                break find_super
+
+            # Corresponding parent method doesn't exist. Should we error?
+            node[6][i] = quote do: discard
+
+      result.methods[$node[0]] = node
     else:
       discard
 
@@ -95,13 +107,14 @@ macro class*(head: untyped, body: untyped = nnkEmpty.newNimNode): untyped =
   of nnkCall:  # class MyClass(ParentA, ParentB)
     id = head[0]
     bases.add head[1..^1]
-  else: error "bad class syntax"
+  else: error "class syntax error"
 
   let
-    mro = id.method_resolution bases
-    (attrs, methods) = id.parse_class_body(mro, body)
+    mro = bases.method_resolution id
+    (attrs, methods) = body.parse_class_body(id, mro)
     mro_repr = mro.mapit($it)
     name = $id
+    vars = nnkRecList.newNimNode
 
   class_lookup[name] = (
     id: id,
@@ -110,32 +123,44 @@ macro class*(head: untyped, body: untyped = nnkEmpty.newNimNode): untyped =
     methods: methods,
   )
 
-  let self = quote do:
-    type(`id`) or `id`
-
-  result = quote do:
+  result = nnkStmtList.newNimNode
+  result.add quote do:
     type `id`* = ref object
 
-    proc clsname*(cls: `self`): string =
+  result.last()[0][2][0][2] = vars
+
+  for attr in attrs.values:
+    vars.add nnkIdentDefs.newTree(
+      nnkPostfix.newTree(ident"*", attr[0]),
+      attr[1],
+      newEmptyNode(),
+    )
+
+  result.add quote do:
+    proc clsname*(cls: type(`id`) or `id`): string =
       `name`
 
-    proc mro*(cls: `self`): seq[string] =
+  result.add quote do:
+    proc mro*(cls: type(`id`) or `id`): seq[string] =
       @`mro_repr`
 
-  for m in methods:
+  for m in methods.values:
     result.add m
 
 when is_main_module:
   class A
   class B
-  class C
+  class C:
+    proc meow =
+      echo "meow"
+
   class D
   class E
   class K1(C, B, A)
   class K2(B, D, E)
   class K3(A, D)
 
-  # Full class specialization:
+  # Full class specification:
   class Z(K1, K3, K2):
     const
       version = (1, 2)
@@ -144,12 +169,18 @@ when is_main_module:
       a: int
       b: string
 
-    method do_something =
-      super().do_something
-      echo "something done"
+    proc set_a(a: int) =
+      self.a = a
+
+    proc meow =
+      super()
 
   echo K1.mro
   echo K2.mro
   echo K3.mro
   echo Z.mro
   echo Z.version
+  var z = Z(a: 1, b: "hi")
+  z.set_a(10)
+  echo z.a
+  z.meow()
