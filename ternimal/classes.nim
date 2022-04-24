@@ -61,6 +61,32 @@ proc class_const(class_id, constant: NimNode): NimNode =
   quote do:
     proc `id`*(cls: type(`class_id`) or `class_id`): `kind` = `val`
 
+proc replace_super(node, super: NimNode) =
+  ## Replace `super()` with parent's method.
+  for i, child in node:
+    case child.kind:
+    # Ignore all leaf nodes:
+    of nnkNone, nnkEmpty, nnkNilLit:
+      continue
+    of nnkCharLit..nnkUInt64Lit:
+      continue
+    of nnkFloatLit..nnkFloat64Lit:
+      continue
+    of nnkStrLit..nnkTripleStrLit:
+      continue
+    of nnkCommentStmt, nnkIdent, nnkSym:
+      continue
+    # Replace super calls:
+    of nnkCall:
+      if child[0] == ident"super":
+        node[i] = super
+      else:
+        # ... or recurse:
+        child.replace_super super
+    # Recurse on non-leaf nodes:
+    else:
+      child.replace_super super
+
 proc parse_class_body(body, class_id: NimNode, mro: seq[NimNode]): tuple[attrs: VTable, methods: VTable]=
   result.attrs = VTable()
   result.methods = VTable()
@@ -79,17 +105,14 @@ proc parse_class_body(body, class_id: NimNode, mro: seq[NimNode]): tuple[attrs: 
       # Add `self` to arguments of callable
       node[3].insert 1, nnkIdentDefs.newTree(ident"self", class_id, newEmptyNode())
 
-      # Replace `super()` with parent's method.
-      for i, statement in node[6]:
-        if statement.kind == nnkCall and statement[0] == ident"super":
-          block find_super:
-            for parent in mro[1..^1]:
-              if $node[0] in class_lookup[$parent].methods:
-                node[6][i] = class_lookup[$parent].methods[$node[0]][6]
-                break find_super
+      var super = quote do: discard  # Or should we error if we fail to find method def in ancestor?
 
-            # Corresponding parent method doesn't exist. Should we error?
-            node[6][i] = quote do: discard
+      for parent in mro[1..^1]:
+        if $node[0] in class_lookup[$parent].methods:
+          super = class_lookup[$parent].methods[$node[0]][6]
+          break
+
+      node[6].replace_super super
 
       result.methods[$node[0]] = node
     else:
@@ -151,15 +174,14 @@ when is_main_module:
   class A
   class B
   class C:
-    proc noise =
-      echo "meow"
+    proc noise: string =
+      "meow"
 
   class D
   class E
   class K1(C, B, A):
-    proc noise =
-      echo "woof"
-      super()
+    proc noise: string =
+      "woof" & super()
   class K2(B, D, E)
   class K3(A, D)
 
@@ -175,9 +197,8 @@ when is_main_module:
     proc set_a(a: int) =
       self.a = a
 
-    proc noise =
-      echo "moo"
-      super()
+    proc noise: string =
+      "moo" & super()
 
   echo K1.mro
   echo K2.mro
@@ -186,5 +207,4 @@ when is_main_module:
   echo Z.version
   var z = Z(a: 1, b: "hi")
   z.set_a(10)
-  echo z.a
-  z.noise()
+  echo z.a, z.noise()
